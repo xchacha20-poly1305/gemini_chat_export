@@ -193,14 +193,20 @@
 			let changed = false;
 			if (!collectedData.has(c)) { collectedData.set(c, info); newly++; }
 			if (!info.userText) {
-				const userTexts = Array.from(c.querySelectorAll('user-query .query-text-line, user-query .query-text p, user-query .query-text'))
-					.map(el => el.innerText.trim()).filter(Boolean);
-				if (userTexts.length) {
-					const combinedUserText = userTexts.join('\n');
+				let userText = null;
+				const textEl = c.querySelector('user-query .query-text');
+				if (textEl && textEl.innerText.trim()) {
+					userText = textEl.innerText.trim();
+				} else {
+					const lineTexts = Array.from(c.querySelectorAll('user-query .query-text-line, user-query .query-text p'))
+						.map(el => el.innerText.trim()).filter(Boolean);
+					if (lineTexts.length) userText = lineTexts.join('\n');
+				}
+				if (userText) {
 					// 检查是否已经存在相同的用户消息
-					if (!seenUserTexts.has(combinedUserText)) {
-						seenUserTexts.add(combinedUserText);
-						info.userText = combinedUserText;
+					if (!seenUserTexts.has(userText)) {
+						seenUserTexts.add(userText);
+						info.userText = userText;
 						changed = true;
 						if (info.type === 'unknown') info.type = 'user';
 					}
