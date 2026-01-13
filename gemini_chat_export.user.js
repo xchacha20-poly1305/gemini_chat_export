@@ -86,6 +86,7 @@
 	const MAX_SCROLL_ATTEMPTS = 300;
 	const SCROLL_INCREMENT_FACTOR = 0.85;
 	const SCROLL_STABILITY_CHECKS = 3;
+	const SCROLL_NO_DATA_CHECKS = 2;
 
 	if (!window.__GEMINI_EXPORT_FORMAT) { window.__GEMINI_EXPORT_FORMAT = 'txt'; }
 	if (window.__GEMINI_THOUGHT_PLACEHOLDER === undefined) { window.__GEMINI_THOUGHT_PLACEHOLDER = true; }
@@ -1177,6 +1178,12 @@ ${escapeMd(item.content)}
 		return newlyFoundCount > 0 || dataUpdatedInExistingTurn;
 	}
 
+	function isLoadingIndicatorPresent() {
+		return Boolean(document.querySelector(
+			'[aria-busy="true"], [role="progressbar"], mat-progress-bar, mat-progress-spinner, .mat-progress-bar, .mat-progress-spinner, .loading, .spinner, [data-loading="true"]'
+		));
+	}
+
 	async function autoScrollDown_AiStudio() {
 		console.log("启动自动滚动 (滚动导出)...");
 		isScrolling = true; collectedData.clear(); scrollCount = 0; noChangeCounter = 0;
@@ -1193,15 +1200,24 @@ ${escapeMd(item.content)}
 		const getClientHeight = () => isWindowScroller ? window.innerHeight : scroller.clientHeight;
 		updateStatus(`开始增量滚动(最多 ${MAX_SCROLL_ATTEMPTS} 次)...`);
 		let lastScrollHeight = -1;
+		let noNewDataCounter = 0;
 
 		while (scrollCount < MAX_SCROLL_ATTEMPTS && isScrolling) {
 			const currentScrollTop = getScrollTop(); const currentScrollHeight = getScrollHeight(); const currentClientHeight = getClientHeight();
 			if (currentScrollHeight === lastScrollHeight) { noChangeCounter++; } else { noChangeCounter = 0; }
 			lastScrollHeight = currentScrollHeight;
-			if (noChangeCounter >= SCROLL_STABILITY_CHECKS && currentScrollTop + currentClientHeight >= currentScrollHeight - 20) {
-				console.log("滚动条疑似触底(滚动导出)，停止滚动。");
-				updateStatus(`滚动完成 (疑似触底)。`);
-				break;
+			const isNearBottom = (currentScrollTop + currentClientHeight >= currentScrollHeight - 20);
+			if (noChangeCounter >= SCROLL_STABILITY_CHECKS && isNearBottom) {
+				if (isLoadingIndicatorPresent()) {
+					updateStatus('检测到加载中，继续等待...');
+					await delay(SCROLL_DELAY_MS);
+					continue;
+				}
+				if (noNewDataCounter >= SCROLL_NO_DATA_CHECKS) {
+					console.log("滚动条疑似触底(滚动导出)，停止滚动。");
+					updateStatus(`滚动完成 (疑似触底)。`);
+					break;
+				}
 			}
 			if (currentScrollTop === 0 && scrollCount > 10) {
 				console.log("滚动条返回顶部(滚动导出)，停止滚动。");
@@ -1214,7 +1230,9 @@ ${escapeMd(item.content)}
 			updateStatus(`滚动 ${scrollCount}/${MAX_SCROLL_ATTEMPTS}... 等待 ${SCROLL_DELAY_MS}ms... (已收集 ${collectedData.size} 条记录。)`);
 			await delay(SCROLL_DELAY_MS);
 			// 使用统一调度：优先 Gemini 结构，其次 AI Studio
-			try { extractDataIncremental_Dispatch(); } catch (e) { console.warn('调度提取失败，回退 AI Studio 提取', e); try { extractDataIncremental_AiStudio(); } catch (_) { } }
+			let dataUpdated = false;
+			try { dataUpdated = extractDataIncremental_Dispatch(); } catch (e) { console.warn('调度提取失败，回退 AI Studio 提取', e); try { dataUpdated = extractDataIncremental_AiStudio(); } catch (_) { } }
+			if (dataUpdated) { noNewDataCounter = 0; } else { noNewDataCounter++; }
 			if (!isScrolling) {
 				console.log("检测到手动停止信号 (滚动导出)，退出滚动循环。"); break;
 			}
