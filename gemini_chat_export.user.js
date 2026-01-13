@@ -314,16 +314,6 @@
 				</div>
 				<p style="margin: 0 0 20px 0; font-size: 13px; opacity: 0.9; line-height: 1.4;">一键导出聊天记录和Canvas内容</p>
 
-				<!-- 公告区域 -->
-				<div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 15px; margin-bottom: 25px; backdrop-filter: blur(10px);">
-					<h3 style="margin: 0 0 10px 0; font-size: 14px; color: #FFE082;">📢 插件公告</h3>
-					<div style="font-size: 12px; line-height: 1.5; opacity: 0.9;">
-						<div style="margin-bottom: 8px;">🎉 新增Canvas内容导出功能</div>
-						<div style="margin-bottom: 8px;">⚡ 支持多格式导出选择</div>
-						<div>💡 建议导出前滚动到对话顶部</div>
-					</div>
-				</div>
-
 				<!-- 导出格式选择 -->
 				<div style="margin-bottom: 25px;">
 					<h3 style="margin: 0 0 15px 0; font-size: 14px; color: #E1F5FE;">🎨 导出格式</h3>
