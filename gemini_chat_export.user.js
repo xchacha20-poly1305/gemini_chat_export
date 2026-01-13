@@ -1410,7 +1410,6 @@ ${escapeMd(item.content)}
 	}
 
 	// --- 脚本初始化入口 ---
-	console.log("Gemini_Chat_Export 导出脚本 (v1.0.5): 等待页面加载 (2.5秒)...");
-	setTimeout(createUI, 2500);
+	createUI()
 
 })();
