@@ -87,6 +87,10 @@
 	const SCROLL_INCREMENT_FACTOR = 0.85;
 	const SCROLL_STABILITY_CHECKS = 3;
 	const SCROLL_NO_DATA_CHECKS = 2;
+	const AUTO_SCROLL_UNTIL_DONE = true;
+	const SCROLL_PRELOAD_STABILITY_CHECKS = 4;
+	const SCROLL_DONE_CONFIRM_CHECKS = 2;
+	const SCROLL_LOADING_MAX_WAIT = 6;
 
 	if (!window.__GEMINI_EXPORT_FORMAT) { window.__GEMINI_EXPORT_FORMAT = 'txt'; }
 	if (window.__GEMINI_THOUGHT_PLACEHOLDER === undefined) { window.__GEMINI_THOUGHT_PLACEHOLDER = true; }
@@ -183,7 +187,14 @@
 
 	// Gemini 新增滚动容器获取与解析逻辑
 	function getMainScrollerElement_Gemini() {
-		return document.querySelector('#chat-history') || document.documentElement;
+		return document.querySelector('infinite-scroller.chat-history[data-test-id="chat-history-container"]')
+			|| document.querySelector('#chat-history')
+			|| document.documentElement;
+	}
+
+	function getMainScrollerElement_Dispatch() {
+		if (document.querySelector('#chat-history')) return getMainScrollerElement_Gemini();
+		return getMainScrollerElement_AiStudio();
 	}
 
 	function extractDataIncremental_Gemini() {
@@ -831,7 +842,7 @@
 			stopButtonScroll.textContent = buttonTextStopScroll;
 
 			// 先滚动到顶部
-			const scroller = getMainScrollerElement_AiStudio();
+			const scroller = getMainScrollerElement_Dispatch();
 			if (scroller) {
 				updateStatus('步骤 2/3: 滚动到顶部...');
 				const isWindowScroller = (scroller === document.documentElement || scroller === document.body);
@@ -1179,15 +1190,80 @@ ${escapeMd(item.content)}
 	}
 
 	function isLoadingIndicatorPresent() {
-		return Boolean(document.querySelector(
+		const nodes = document.querySelectorAll(
 			'[aria-busy="true"], [role="progressbar"], mat-progress-bar, mat-progress-spinner, .mat-progress-bar, .mat-progress-spinner, .loading, .spinner, [data-loading="true"]'
-		));
+		);
+		for (const el of nodes) {
+			const style = window.getComputedStyle(el);
+			if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+			if (el.getClientRects().length === 0) continue;
+			return true;
+		}
+		return false;
+	}
+
+	async function preloadAllHistory_AiStudio(scroller, isWindowScroller) {
+		updateStatus('预加载历史对话中...');
+		let stableCount = 0;
+		let lastScrollHeight = -1;
+		let lastDataSize = collectedData.size;
+		let loadingStuckCounter = 0;
+		const getScrollTop = () => isWindowScroller ? window.scrollY : scroller.scrollTop;
+		const getScrollHeight = () => isWindowScroller ? document.documentElement.scrollHeight : scroller.scrollHeight;
+
+		while (isScrolling && stableCount < SCROLL_PRELOAD_STABILITY_CHECKS) {
+			if (isWindowScroller) {
+				window.scrollTo({ top: 0, behavior: 'auto' });
+				window.scrollTo({ top: 1, behavior: 'auto' });
+				window.scrollTo({ top: 0, behavior: 'auto' });
+			} else {
+				scroller.scrollTop = 0;
+				scroller.scrollTop = 1;
+				scroller.scrollTop = 0;
+			}
+			await delay(SCROLL_DELAY_MS);
+
+			let dataUpdated = false;
+			try { dataUpdated = extractDataIncremental_Dispatch(); } catch (e) { console.warn('预加载调度提取失败，回退 AI Studio 提取', e); try { dataUpdated = extractDataIncremental_AiStudio(); } catch (_) { } }
+
+			const currentScrollHeight = getScrollHeight();
+			const currentDataSize = collectedData.size;
+			const isAtTop = getScrollTop() <= 2;
+
+			if (isLoadingIndicatorPresent()) {
+				if (currentScrollHeight > lastScrollHeight || currentDataSize > lastDataSize || dataUpdated) {
+					loadingStuckCounter = 0;
+				} else {
+					loadingStuckCounter++;
+				}
+				updateStatus('预加载中检测到加载中，继续等待...');
+				await delay(SCROLL_DELAY_MS);
+				if (loadingStuckCounter >= SCROLL_LOADING_MAX_WAIT) {
+					updateStatus('加载指示器疑似卡住，继续下一步...');
+					break;
+				}
+				stableCount = 0;
+				lastScrollHeight = currentScrollHeight;
+				lastDataSize = currentDataSize;
+				continue;
+			}
+
+			if (!isAtTop) {
+				stableCount = 0;
+			} else if (currentScrollHeight > lastScrollHeight || currentDataSize > lastDataSize || dataUpdated) {
+				stableCount = 0;
+			} else {
+				stableCount++;
+			}
+			lastScrollHeight = currentScrollHeight;
+			lastDataSize = currentDataSize;
+		}
 	}
 
 	async function autoScrollDown_AiStudio() {
 		console.log("启动自动滚动 (滚动导出)...");
 		isScrolling = true; collectedData.clear(); scrollCount = 0; noChangeCounter = 0;
-		const scroller = getMainScrollerElement_AiStudio();
+		const scroller = getMainScrollerElement_Dispatch();
 		if (!scroller) {
 			updateStatus('错误 (滚动): 找不到滚动区域');
 			alert('未能找到聊天记录的滚动区域，无法自动滚动。请检查脚本中的选择器。');
@@ -1198,27 +1274,18 @@ ${escapeMd(item.content)}
 		const getScrollTop = () => isWindowScroller ? window.scrollY : scroller.scrollTop;
 		const getScrollHeight = () => isWindowScroller ? document.documentElement.scrollHeight : scroller.scrollHeight;
 		const getClientHeight = () => isWindowScroller ? window.innerHeight : scroller.clientHeight;
-		updateStatus(`开始增量滚动(最多 ${MAX_SCROLL_ATTEMPTS} 次)...`);
+		if (AUTO_SCROLL_UNTIL_DONE) {
+			await preloadAllHistory_AiStudio(scroller, isWindowScroller);
+		}
+		updateStatus(`开始增量滚动${AUTO_SCROLL_UNTIL_DONE ? ' (自动完成直到结束)' : `(最多 ${MAX_SCROLL_ATTEMPTS} 次)`}...`);
 		let lastScrollHeight = -1;
 		let noNewDataCounter = 0;
+		let doneConfirmCounter = 0;
 
-		while (scrollCount < MAX_SCROLL_ATTEMPTS && isScrolling) {
+		while ((AUTO_SCROLL_UNTIL_DONE || scrollCount < MAX_SCROLL_ATTEMPTS) && isScrolling) {
 			const currentScrollTop = getScrollTop(); const currentScrollHeight = getScrollHeight(); const currentClientHeight = getClientHeight();
 			if (currentScrollHeight === lastScrollHeight) { noChangeCounter++; } else { noChangeCounter = 0; }
 			lastScrollHeight = currentScrollHeight;
-			const isNearBottom = (currentScrollTop + currentClientHeight >= currentScrollHeight - 20);
-			if (noChangeCounter >= SCROLL_STABILITY_CHECKS && isNearBottom) {
-				if (isLoadingIndicatorPresent()) {
-					updateStatus('检测到加载中，继续等待...');
-					await delay(SCROLL_DELAY_MS);
-					continue;
-				}
-				if (noNewDataCounter >= SCROLL_NO_DATA_CHECKS) {
-					console.log("滚动条疑似触底(滚动导出)，停止滚动。");
-					updateStatus(`滚动完成 (疑似触底)。`);
-					break;
-				}
-			}
 			if (currentScrollTop === 0 && scrollCount > 10) {
 				console.log("滚动条返回顶部(滚动导出)，停止滚动。");
 				updateStatus(`滚动完成 (返回顶部)。`);
@@ -1233,6 +1300,25 @@ ${escapeMd(item.content)}
 			let dataUpdated = false;
 			try { dataUpdated = extractDataIncremental_Dispatch(); } catch (e) { console.warn('调度提取失败，回退 AI Studio 提取', e); try { dataUpdated = extractDataIncremental_AiStudio(); } catch (_) { } }
 			if (dataUpdated) { noNewDataCounter = 0; } else { noNewDataCounter++; }
+			const postScrollTop = getScrollTop();
+			const postScrollHeight = getScrollHeight();
+			const postClientHeight = getClientHeight();
+			const isNearBottom = (postScrollTop + postClientHeight >= postScrollHeight - 20);
+			if (noChangeCounter >= SCROLL_STABILITY_CHECKS && isNearBottom && noNewDataCounter >= SCROLL_NO_DATA_CHECKS) {
+				if (isLoadingIndicatorPresent()) {
+					updateStatus('检测到加载中，继续等待...');
+					await delay(SCROLL_DELAY_MS);
+					continue;
+				}
+				doneConfirmCounter++;
+				if (doneConfirmCounter >= SCROLL_DONE_CONFIRM_CHECKS) {
+					console.log("滚动条疑似触底(滚动导出)，停止滚动。");
+					updateStatus(`滚动完成 (疑似触底)。`);
+					break;
+				}
+			} else {
+				doneConfirmCounter = 0;
+			}
 			if (!isScrolling) {
 				console.log("检测到手动停止信号 (滚动导出)，退出滚动循环。"); break;
 			}
@@ -1240,7 +1326,7 @@ ${escapeMd(item.content)}
 
 		if (!isScrolling && scrollCount < MAX_SCROLL_ATTEMPTS) {
 			updateStatus(`滚动已手动停止 (已滚动 ${scrollCount} 次)。`);
-		} else if (scrollCount >= MAX_SCROLL_ATTEMPTS) {
+		} else if (!AUTO_SCROLL_UNTIL_DONE && scrollCount >= MAX_SCROLL_ATTEMPTS) {
 			updateStatus(`滚动停止: 已达到最大尝试次数 (${MAX_SCROLL_ATTEMPTS})。`);
 		}
 		isScrolling = false;
@@ -1365,7 +1451,7 @@ ${escapeMd(item.content)}
 		stopButtonScroll.textContent = buttonTextStopScroll;
 
 		// 在开始前先滚动到页面顶部
-		const scroller = getMainScrollerElement_AiStudio();
+		const scroller = getMainScrollerElement_Dispatch();
 		if (scroller) {
 			updateStatus('正在滚动到顶部..');
 			const isWindowScroller = (scroller === document.documentElement || scroller === document.body);
