@@ -1,10 +1,5 @@
-# 前端
 node_modules
 dist
 .DS_Store
-.*
-# 保留.git相关
-!.git
-# 忽略VSCode
 .vscode
 .idea
