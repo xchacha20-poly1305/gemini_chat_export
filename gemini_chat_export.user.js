@@ -88,6 +88,7 @@
 	const SCROLL_STABILITY_CHECKS = 3;
 
 	if (!window.__GEMINI_EXPORT_FORMAT) { window.__GEMINI_EXPORT_FORMAT = 'txt'; }
+	if (window.__GEMINI_THOUGHT_PLACEHOLDER === undefined) { window.__GEMINI_THOUGHT_PLACEHOLDER = true; }
 
 	// --- 脚本内部状态变量 ---
 	let isScrolling = false;
@@ -106,6 +107,7 @@
 	let sidePanel = null;
 	let toggleButton = null;
 	let formatSelector = null;
+	let thoughtPlaceholderToggle = null;
 
 	// --- 辅助工具函数 ---
 	function delay(ms) {
@@ -224,8 +226,13 @@
 						let textReal = '';
 						const body = thoughts.querySelector('.thoughts-body, .thoughts-content');
 						if (body && body.innerText.trim() && !/显示思路/.test(body.innerText.trim())) textReal = body.innerText.trim();
-						info.thoughtText = textReal || '(思维链未展开)'; // 占位策略 A
-						changed = true;
+						if (textReal) {
+							info.thoughtText = textReal;
+							changed = true;
+						} else if (window.__GEMINI_THOUGHT_PLACEHOLDER !== false) {
+							info.thoughtText = '(思维链未展开)'; // 占位策略 A
+							changed = true;
+						}
 					}
 				}
 			}
@@ -336,6 +343,16 @@
 					</div>
 				</div>
 
+				<!-- 思维链选项 -->
+				<div style="margin-bottom: 20px;">
+					<h3 style="margin: 0 0 10px 0; font-size: 14px; color: #E8F5E9;">🧠 思维链</h3>
+					<label style="display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer;">
+						<input id="thought-placeholder-toggle" type="checkbox" style="accent-color: #4CAF50;">
+						<span>未展开时添加占位提示</span>
+					</label>
+					<div style="margin-top: 6px; font-size: 10px; opacity: 0.8;">关闭后将忽略未展开的思维链</div>
+				</div>
+
 				<!-- 功能按钮区域 -->
 				<div id="button-container" style="display: flex; flex-direction: column; gap: 12px;">
 					<!-- 滚动导出按钮 -->
@@ -427,9 +444,11 @@
 		stopButtonScroll = document.getElementById('stop-scrolling-button');
 		statusDiv = document.getElementById('extract-status-div');
 		formatSelector = document.getElementById('format-selector');
+		thoughtPlaceholderToggle = document.getElementById('thought-placeholder-toggle');
 
 		// 初始化格式选择器
 		initFormatSelector();
+		initThoughtPlaceholderToggle();
 
 		// 添加事件监听器
 		captureButtonScroll.addEventListener('click', handleScrollExtraction);
@@ -576,6 +595,21 @@
 					}
 				}, 2000);
 			});
+		});
+	}
+	
+	function initThoughtPlaceholderToggle() {
+		if (!thoughtPlaceholderToggle) return;
+		const enabled = window.__GEMINI_THOUGHT_PLACEHOLDER !== false;
+		thoughtPlaceholderToggle.checked = enabled;
+		thoughtPlaceholderToggle.addEventListener('change', () => {
+			window.__GEMINI_THOUGHT_PLACEHOLDER = thoughtPlaceholderToggle.checked;
+			updateStatus(thoughtPlaceholderToggle.checked ? '未展开思维链将显示占位提示' : '未展开思维链将被忽略');
+			setTimeout(() => {
+				if (statusDiv.textContent.includes('思维链')) {
+					updateStatus('');
+				}
+			}, 2000);
 		});
 	}
 
