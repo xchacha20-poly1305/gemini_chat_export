@@ -270,7 +270,7 @@
 			right: 0;
 			width: 40px;
 			height: 60px;
-			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.08) 28%, rgba(255,255,255,0) 65%), radial-gradient(circle at 50% 50%, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0) 55%), conic-gradient(from 0deg at 50% 50%, #FF5D5D 0deg, #4285F4 90deg, #34A853 180deg, #FBBC05 270deg, #FF5D5D 360deg);
 			color: white;
 			border: none;
 			border-radius: 20px 0 0 20px;
@@ -296,7 +296,7 @@
 			right: -400px;
 			width: 400px;
 			height: 100vh;
-			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 30%, rgba(255,255,255,0) 70%), radial-gradient(circle at 50% 50%, rgba(0,0,0,0.07) 0%, rgba(0,0,0,0) 60%), conic-gradient(from 0deg at 50% 50%, #FF5D5D 0deg, #4285F4 90deg, #34A853 180deg, #FBBC05 270deg, #FF5D5D 360deg);
 			z-index: 10000;
 			transition: right 0.3s ease;
 			box-shadow: -5px 0 20px rgba(0,0,0,0.3);
@@ -547,7 +547,7 @@
 				right: 8px;
 				box-shadow: -6px 0 20px rgba(0,0,0,0.35);
 				transform: translateY(-50%) scale(1.1);
-				background: linear-gradient(135deg, #7986cb 0%, #8e24aa 100%);
+				background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0.12) 32%, rgba(255,255,255,0) 70%), radial-gradient(circle at 50% 50%, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0) 60%), conic-gradient(from 0deg at 50% 50%, #FF5D5D 0deg, #4285F4 90deg, #34A853 180deg, #FBBC05 270deg, #FF5D5D 360deg);
 			}
 			
 			/* 面板滚动条美化 */
